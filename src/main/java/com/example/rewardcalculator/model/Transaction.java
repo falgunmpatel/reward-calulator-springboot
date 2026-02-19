@@ -28,12 +28,15 @@ public class Transaction {
     /**
      * Purchase amount in dollars.
      * Must be a positive value; negative amounts are rejected with a 400 error.
+     * Cents are stored but truncated during points calculation.
      */
     @NotNull
     @Positive
+    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 
     /** Date the transaction occurred. */
     @NotNull
+    @Column(nullable = false)
     private LocalDate transactionDate;
 }

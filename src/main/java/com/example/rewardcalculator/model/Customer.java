@@ -16,8 +16,10 @@ public class Customer {
     private Long id;
 
     /** Full name of the customer. */
+    @Column(nullable = false)
     private String name;
 
-    /** Email address of the customer. */
+    /** Email address of the customer. Must be unique across all customers. */
+    @Column(nullable = false, unique = true)
     private String email;
 }
