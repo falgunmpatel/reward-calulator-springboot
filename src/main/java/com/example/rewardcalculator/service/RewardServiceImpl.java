@@ -8,6 +8,7 @@ import com.example.rewardcalculator.model.Transaction;
 import com.example.rewardcalculator.repository.CustomerRepository;
 import com.example.rewardcalculator.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.YearMonth;
@@ -17,6 +18,8 @@ import java.util.TreeMap;
 
 /**
  * Implementation of {@link RewardService} containing all reward-point business logic.
+ *
+ * <p>All public methods are read-only transactions; no data is written by this service.</p>
  */
 @Service
 public class RewardServiceImpl implements RewardService {
@@ -27,22 +30,34 @@ public class RewardServiceImpl implements RewardService {
     private final CustomerRepository customerRepository;
     private final TransactionRepository transactionRepository;
 
+    /**
+     * Constructs the service with the required repositories.
+     *
+     * @param customerRepository    repository for customer data
+     * @param transactionRepository repository for transaction data
+     */
     public RewardServiceImpl(CustomerRepository customerRepository,
                              TransactionRepository transactionRepository) {
         this.customerRepository = customerRepository;
         this.transactionRepository = transactionRepository;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
+    @Transactional(readOnly = true)
     public List<CustomerRewardSummaryDTO> getRewardsForAllCustomers() {
         return customerRepository.findAll().stream()
                 .map(c -> buildSummary(c, transactionRepository.findByCustomerId(c.getId())))
                 .toList();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
+    @Transactional(readOnly = true)
     public CustomerRewardSummaryDTO getRewardsForCustomer(Long customerId) {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new CustomerNotFoundException(customerId));
@@ -51,10 +66,12 @@ public class RewardServiceImpl implements RewardService {
 
     /**
      * Builds a {@link CustomerRewardSummaryDTO} from a customer and their transactions.
+     * Months are derived dynamically from transaction dates — never hardcoded.
      *
      * @param customer     the customer entity
-     * @param transactions the customer's transactions
-     * @return fully populated reward summary
+     * @param transactions the customer's transactions (may be empty)
+     * @return fully populated reward summary; {@code monthlyRewards} is empty (not null) when
+     *         the customer has no transactions
      */
     private CustomerRewardSummaryDTO buildSummary(Customer customer, List<Transaction> transactions) {
         Map<YearMonth, Long> monthlyMap = new TreeMap<>();
@@ -78,7 +95,7 @@ public class RewardServiceImpl implements RewardService {
 
     /**
      * Calculates reward points for a single transaction amount.
-     * Cents are truncated; only the integer dollar portion is used.
+     * Cents are truncated via {@link BigDecimal#longValue()}; only the integer dollar portion is used.
      *
      * <ul>
      *   <li>$0–$50: 0 points</li>
@@ -86,10 +103,10 @@ public class RewardServiceImpl implements RewardService {
      *   <li>Over $100: 50 points (the $50–$100 band) + 2 points per dollar over $100</li>
      * </ul>
      *
-     * @param amount the transaction amount
-     * @return reward points earned
+     * @param amount the transaction amount; must be non-negative
+     * @return reward points earned (always &ge; 0)
      */
-    long calculatePoints(BigDecimal amount) {
+    public long calculatePoints(BigDecimal amount) {
         long dollars = amount.longValue();
         long points = 0;
 
