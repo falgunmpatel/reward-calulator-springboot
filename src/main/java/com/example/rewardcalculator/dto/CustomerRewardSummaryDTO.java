@@ -1,26 +1,19 @@
 package com.example.rewardcalculator.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
 import java.util.List;
 
 /**
- * DTO representing the full reward summary for a single customer across all months.
+ * Immutable DTO representing the full reward summary for a single customer across all months.
+ *
+ * @param customerId      the customer's primary key
+ * @param customerName    the customer's full name
+ * @param monthlyRewards  reward points broken down by month, sorted chronologically; never null
+ * @param totalPoints     sum of all monthly reward points
  */
-@Data
-@AllArgsConstructor
-public class CustomerRewardSummaryDTO {
-
-    /** The customer's primary key. */
-    private Long customerId;
-
-    /** The customer's full name. */
-    private String customerName;
-
-    /** Reward points broken down by month, sorted chronologically. */
-    private List<MonthlyRewardDTO> monthlyRewards;
-
-    /** Sum of all monthly reward points. */
-    private long totalPoints;
+public record CustomerRewardSummaryDTO(
+        Long customerId,
+        String customerName,
+        List<MonthlyRewardDTO> monthlyRewards,
+        long totalPoints) {
 }
+

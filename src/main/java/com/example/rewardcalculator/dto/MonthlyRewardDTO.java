@@ -1,21 +1,12 @@
 package com.example.rewardcalculator.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
 /**
- * DTO representing reward points earned by a customer in a single calendar month.
+ * Immutable DTO representing reward points earned by a customer in a single calendar month.
+ *
+ * @param year   calendar year (e.g. 2024)
+ * @param month  month name in uppercase (e.g. "JANUARY") — never hardcoded, derived from transaction data
+ * @param points total reward points earned in this month
  */
-@Data
-@AllArgsConstructor
-public class MonthlyRewardDTO {
-
-    /** Calendar year (e.g. 2024). */
-    private int year;
-
-    /** Month name in uppercase (e.g. "JANUARY"). */
-    private String month;
-
-    /** Total reward points earned in this month. */
-    private long points;
+public record MonthlyRewardDTO(int year, String month, long points) {
 }
+
