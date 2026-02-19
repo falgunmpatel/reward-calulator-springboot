@@ -54,8 +54,9 @@ com.example.rewardcalculator
 ├── controller/
 │   └── RewardController.java  — GET /api/rewards, GET /api/rewards/{customerId}
 ├── dto/
-│   ├── MonthlyRewardDTO.java
-│   └── CustomerRewardSummaryDTO.java
+│   ├── MonthlyRewardDTO.java          — Java record (year, month, points)
+│   ├── CustomerRewardSummaryDTO.java  — Java record (customerId, customerName, monthlyRewards, totalPoints)
+│   └── ErrorResponseDTO.java          — Java record (status, error, message)
 └── exception/
     ├── CustomerNotFoundException.java
     └── GlobalExceptionHandler.java
