@@ -2,23 +2,27 @@ package com.example.rewardcalculator.service;
 
 import com.example.rewardcalculator.dto.CustomerRewardSummaryDTO;
 import com.example.rewardcalculator.dto.MonthlyRewardDTO;
+import com.example.rewardcalculator.dto.PagedRewardSummaryDTO;
 import com.example.rewardcalculator.exception.CustomerNotFoundException;
+import com.example.rewardcalculator.exception.InvalidDateRangeException;
 import com.example.rewardcalculator.model.Customer;
 import com.example.rewardcalculator.model.Transaction;
 import com.example.rewardcalculator.repository.CustomerRepository;
 import com.example.rewardcalculator.repository.TransactionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-/** Computes reward points for customers based on their transaction history. */
 @Service
 public class RewardServiceImpl implements RewardService {
 
@@ -36,7 +40,6 @@ public class RewardServiceImpl implements RewardService {
         this.transactionRepository = transactionRepository;
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public List<CustomerRewardSummaryDTO> getRewardsForAllCustomers() {
@@ -51,11 +54,33 @@ public class RewardServiceImpl implements RewardService {
         return summaries;
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
-    public CustomerRewardSummaryDTO getRewardsForCustomer(Long customerId) {
-        log.info("Fetching reward summary for customerId={}", customerId);
+    public PagedRewardSummaryDTO getRewardsPaged(Pageable pageable, LocalDate from, LocalDate to) {
+        Page<Customer> customerPage = customerRepository.findAll(pageable);
+        log.info("Fetching paged rewards — page={}, size={}, from={}, to={}",
+                pageable.getPageNumber(), pageable.getPageSize(), from, to);
+
+        List<CustomerRewardSummaryDTO> content = customerPage.getContent().stream()
+                .map(c -> buildSummary(c, fetchTransactions(c.getId(), from, to)))
+                .toList();
+
+        log.debug("Paged rewards built — page {}/{}, items={}",
+                customerPage.getNumber() + 1, customerPage.getTotalPages(), content.size());
+
+        return new PagedRewardSummaryDTO(
+                content,
+                customerPage.getNumber(),
+                customerPage.getSize(),
+                customerPage.getTotalElements(),
+                customerPage.getTotalPages(),
+                customerPage.isLast());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CustomerRewardSummaryDTO getRewardsForCustomer(Long customerId, LocalDate from, LocalDate to) {
+        log.info("Fetching reward summary for customerId={}, from={}, to={}", customerId, from, to);
 
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> {
@@ -63,7 +88,7 @@ public class RewardServiceImpl implements RewardService {
                     return new CustomerNotFoundException(customerId);
                 });
 
-        List<Transaction> transactions = transactionRepository.findByCustomerId(customerId);
+        List<Transaction> transactions = fetchTransactions(customerId, from, to);
         log.debug("Found {} transaction(s) for customerId={}", transactions.size(), customerId);
 
         CustomerRewardSummaryDTO summary = buildSummary(customer, transactions);
@@ -71,14 +96,22 @@ public class RewardServiceImpl implements RewardService {
         return summary;
     }
 
-    /**
-     * Aggregates per-month reward points from transactions and returns a complete summary.
-     * Month keys are derived dynamically from transaction dates — never hardcoded.
-     *
-     * @param customer     the customer entity
-     * @param transactions the customer's transactions (may be empty)
-     * @return reward summary; {@code monthlyRewards} is empty (not null) when there are no transactions
-     */
+    // Returns all transactions for a customer, or a date-filtered subset if from/to are provided.
+    // Null bounds default to LocalDate.MIN / LocalDate.MAX respectively.
+    private List<Transaction> fetchTransactions(Long customerId, LocalDate from, LocalDate to) {
+        if (from == null && to == null) {
+            return transactionRepository.findByCustomerId(customerId);
+        }
+        LocalDate effectiveFrom = (from != null) ? from : LocalDate.MIN;
+        LocalDate effectiveTo   = (to   != null) ? to   : LocalDate.MAX;
+        if (effectiveFrom.isAfter(effectiveTo)) {
+            throw new InvalidDateRangeException(effectiveFrom, effectiveTo);
+        }
+        return transactionRepository
+                .findByCustomerIdAndTransactionDateBetween(customerId, effectiveFrom, effectiveTo);
+    }
+
+    // Aggregates per-month reward points from transactions. Uses TreeMap so months come out sorted.
     private CustomerRewardSummaryDTO buildSummary(Customer customer, List<Transaction> transactions) {
         log.debug("Building reward summary for customerId={}, name='{}', transactions={}",
                 customer.getId(), customer.getName(), transactions.size());
@@ -105,18 +138,8 @@ public class RewardServiceImpl implements RewardService {
         return new CustomerRewardSummaryDTO(customer.getId(), customer.getName(), monthlyRewards, totalPoints);
     }
 
-    /**
-     * Calculates reward points for a single transaction amount (cents truncated).
-     *
-     * <ul>
-     *   <li>$0–$50:      0 pts</li>
-     *   <li>$50–$100:    1 pt per dollar over $50</li>
-     *   <li>Over $100:   50 pts (middle band) + 2 pts per dollar over $100</li>
-     * </ul>
-     *
-     * @param amount transaction amount; must be non-negative
-     * @return reward points earned (&ge; 0)
-     */
+    // $0–$50 → 0 pts | $50–$100 → 1 pt/dollar over $50 | >$100 → 50 pts + 2 pts/dollar over $100
+    @Override
     public long calculatePoints(BigDecimal amount) {
         long dollars = amount.longValue();
         long points = 0;

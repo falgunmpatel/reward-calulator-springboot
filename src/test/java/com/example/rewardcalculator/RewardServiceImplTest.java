@@ -18,7 +18,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+
 
 /**
  * Unit tests for {@link RewardServiceImpl}.
@@ -127,7 +129,7 @@ class RewardServiceImplTest {
                 tx(c, "200.00", "2024-02-10")   // 250 pts
         ));
 
-        var summary = service.getRewardsForCustomer(1L);
+        var summary = service.getRewardsForCustomer(1L, null, null);
 
         assertThat(summary.monthlyRewards()).hasSize(2);
         assertThat(summary.monthlyRewards().get(0).points()).isEqualTo(115); // January
@@ -150,7 +152,7 @@ class RewardServiceImplTest {
                 tx(c, "110.00", "2024-03-05")   // 70
         ));
 
-        assertThat(service.getRewardsForCustomer(1L).totalPoints()).isEqualTo(435);
+        assertThat(service.getRewardsForCustomer(1L, null, null).totalPoints()).isEqualTo(435);
     }
 
     // -------------------------------------------------------------------------
@@ -189,7 +191,7 @@ class RewardServiceImplTest {
     @Test
     void testCustomerNotFound() {
         when(customerRepository.findById(999L)).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.getRewardsForCustomer(999L))
+        assertThatThrownBy(() -> service.getRewardsForCustomer(999L, null, null))
                 .isInstanceOf(CustomerNotFoundException.class)
                 .hasMessageContaining("999");
     }
@@ -204,7 +206,7 @@ class RewardServiceImplTest {
         when(customerRepository.findById(1L)).thenReturn(Optional.of(c));
         when(transactionRepository.findByCustomerId(1L)).thenReturn(List.of());
 
-        var summary = service.getRewardsForCustomer(1L);
+        var summary = service.getRewardsForCustomer(1L, null, null);
 
         assertThat(summary.totalPoints()).isZero();
         assertThat(summary.monthlyRewards()).isNotNull().isEmpty();

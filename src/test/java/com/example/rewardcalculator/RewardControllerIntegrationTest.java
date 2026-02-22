@@ -53,14 +53,14 @@ class RewardControllerIntegrationTest {
     // -------------------------------------------------------------------------
 
     /**
-     * GET /api/rewards returns HTTP 200 with a JSON array of at least 3 entries.
+     * GET /api/rewards returns HTTP 200 with a JSON object whose content array has at least 3 entries.
      */
     @Test
     void testGetAllRewards_returnsOk() throws Exception {
         mockMvc.perform(get("/api/rewards").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(3))));
+                .andExpect(jsonPath("$.content", hasSize(greaterThanOrEqualTo(3))));
     }
 
     /**
@@ -70,7 +70,7 @@ class RewardControllerIntegrationTest {
     void testGetAllRewards_allCustomersPresent() throws Exception {
         mockMvc.perform(get("/api/rewards").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].customerName",
+                .andExpect(jsonPath("$.content[*].customerName",
                         hasItems("Alice Johnson", "Bob Smith", "Carol White")));
     }
 
@@ -81,9 +81,9 @@ class RewardControllerIntegrationTest {
     void testGetAllRewards_eachCustomerHasMonthlyBreakdown() throws Exception {
         mockMvc.perform(get("/api/rewards").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].monthlyRewards", not(empty())))
-                .andExpect(jsonPath("$[1].monthlyRewards", not(empty())))
-                .andExpect(jsonPath("$[2].monthlyRewards", not(empty())));
+                .andExpect(jsonPath("$.content[0].monthlyRewards", not(empty())))
+                .andExpect(jsonPath("$.content[1].monthlyRewards", not(empty())))
+                .andExpect(jsonPath("$.content[2].monthlyRewards", not(empty())));
     }
 
     // -------------------------------------------------------------------------
