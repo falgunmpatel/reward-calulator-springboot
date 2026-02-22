@@ -1,40 +1,37 @@
 # Retailer Rewards Calculator
 
-A Spring Boot REST API that calculates reward points earned by customers based on their purchase transactions. Given a set of transactions over any time period, the API returns a per-month and total reward point breakdown for each customer.
+A Spring Boot REST API that calculates reward points earned by customers based on their purchase transactions. Returns a per-month breakdown and running total per customer, with optional date-range filtering and pagination.
 
 ---
 
 ## Tech Stack
 
-| | |
+| Technology | Version |
 |---|---|
 | Java | 21 |
 | Spring Boot | 4.0.2 |
 | Database | PostgreSQL (runtime) · H2 (tests) |
 | ORM | Spring Data JPA / Hibernate |
 | Build | Maven |
-| Boilerplate | Lombok |
+| API Docs | Springdoc OpenAPI 2.8.4 |
 
 ---
 
-## How Reward Points Work
+## How Points Are Calculated
 
-Points are calculated per transaction based on the dollar amount spent (cents are ignored):
+Cents are truncated before calculating — `$120.99` counts as `$120`.
 
-| Spend Range | Points Earned |
+| Spend | Points |
 |---|---|
-| $0 – $50 | 0 points |
-| $50.01 – $100 | 1 point per dollar over $50 |
-| Over $100 | 50 points + 2 points per dollar over $100 |
+| $0 – $50 | 0 |
+| $50.01 – $100 | 1 pt per dollar over $50 |
+| Over $100 | 50 pts + 2 pts per dollar over $100 |
 
-**Examples:**
-
-| Transaction | Calculation | Points |
-|---|---|---|
-| $120.00 | (120−100)×2 + 50 | 90 |
-| $75.00 | (75−50)×1 | 25 |
-| $200.00 | (200−100)×2 + 50 | 250 |
-| $45.00 | — | 0 |
+```
+$120  →  (120 - 100) × 2  +  50  =  90 pts
+$75   →  (75  -  50) × 1          =  25 pts
+$45   →  0 pts
+```
 
 ---
 
@@ -42,24 +39,13 @@ Points are calculated per transaction based on the dollar amount spent (cents ar
 
 ```
 com.example.rewardcalculator
-├── model/
-│   ├── Customer.java          — JPA entity (id, name, email)
-│   └── Transaction.java       — JPA entity (id, customer, amount, transactionDate)
-├── repository/
-│   ├── CustomerRepository.java
-│   └── TransactionRepository.java
-├── service/
-│   ├── RewardService.java     — interface
-│   └── RewardServiceImpl.java — points calculation & monthly aggregation
-├── controller/
-│   └── RewardController.java  — GET /api/rewards, GET /api/rewards/{customerId}
-├── dto/
-│   ├── MonthlyRewardDTO.java          — Java record (year, month, points)
-│   ├── CustomerRewardSummaryDTO.java  — Java record (customerId, customerName, monthlyRewards, totalPoints)
-│   └── ErrorResponseDTO.java          — Java record (status, error, message)
-└── exception/
-    ├── CustomerNotFoundException.java
-    └── GlobalExceptionHandler.java
+├── config/         — OpenAPI/Swagger setup
+├── controller/     — REST endpoints
+├── service/        — Points calculation, aggregation, pagination
+├── repository/     — Spring Data JPA (includes date-range derived queries)
+├── model/          — Customer, Transaction entities
+├── dto/            — Java Records for all API responses
+└── exception/      — Custom exceptions + GlobalExceptionHandler
 ```
 
 ---
@@ -74,108 +60,106 @@ com.example.rewardcalculator
 
 ## Database Setup
 
-Create the database before running the app:
-
 ```sql
 CREATE DATABASE rewarddb;
 ```
 
-Connection defaults — all overridable via environment variables:
+Connection values can be overridden via environment variables:
 
-| Env Var | Default |
+| Variable | Default |
 |---|---|
 | `DB_URL` | `jdbc:postgresql://localhost:5432/rewarddb` |
 | `DB_USERNAME` | `postgres` |
 | `DB_PASSWORD` | `12341234` |
-
-To override, set the env vars before running:
-
-```bash
-export DB_URL=jdbc:postgresql://localhost:5432/rewarddb
-export DB_USERNAME=myuser
-export DB_PASSWORD=mypassword
-```
 
 ---
 
 ## Running the App
 
 ```bash
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
-The app starts at **`http://localhost:8081`**.
+Starts on `http://localhost:8081`. Hibernate creates the schema on first run; `data.sql` seeds 3 customers and 14 transactions across Jan–Mar 2024.
 
-On first run, Hibernate auto-creates the schema (`ddl-auto: update`) and `data.sql` seeds the database with 3 customers and 14 transactions across January–March 2024.
+---
+
+## Swagger UI
+
+`http://localhost:8081/swagger-ui.html`
+
+OpenAPI spec (JSON): `http://localhost:8081/v3/api-docs`
 
 ---
 
 ## Running Tests
 
 ```bash
-mvn test
+./mvnw test
 ```
 
-Tests run against an in-memory **H2 database** using the `test` Spring profile — no PostgreSQL installation required.
+29 tests — 17 unit (Mockito, no Spring context) + 12 integration (MockMvc + H2). PostgreSQL not required for tests.
 
 ---
 
 ## API Reference
 
-### Endpoints
-
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/rewards` | Reward summary for all customers |
-| `GET` | `/api/rewards/{customerId}` | Reward summary for a single customer |
+| `GET` | `/api/rewards` | Paginated summaries for all customers |
+| `GET` | `/api/rewards/{customerId}` | Summary for one customer |
 
----
+### `GET /api/rewards`
 
-### GET `/api/rewards`
+| Param | Default | Notes |
+|---|---|---|
+| `page` | `0` | Zero-based |
+| `size` | `10` | Min 1 |
+| `from` | — | ISO date, inclusive |
+| `to` | — | ISO date, inclusive |
 
-Returns reward summaries for all customers.
+### `GET /api/rewards/{customerId}`
+
+| Param | Notes |
+|---|---|
+| `from` | Optional, ISO date |
+| `to` | Optional, ISO date |
+
+### Example Requests
 
 ```bash
-curl http://localhost:8081/api/rewards
+curl "http://localhost:8081/api/rewards"
+curl "http://localhost:8081/api/rewards?page=0&size=5&from=2024-01-01&to=2024-03-31"
+curl "http://localhost:8081/api/rewards/1"
+curl "http://localhost:8081/api/rewards/1?from=2024-01-01&to=2024-01-31"
 ```
 
-**Response `200 OK`:**
+### Response — `GET /api/rewards`
+
 ```json
-[
-  {
-    "customerId": 1,
-    "customerName": "Alice Johnson",
-    "monthlyRewards": [
-      { "year": 2024, "month": "JANUARY",  "points": 115 },
-      { "year": 2024, "month": "FEBRUARY", "points": 250 },
-      { "year": 2024, "month": "MARCH",    "points": 70  }
-    ],
-    "totalPoints": 435
-  },
-  {
-    "customerId": 2,
-    "customerName": "Bob Smith",
-    "monthlyRewards": [
-      { "year": 2024, "month": "JANUARY",  "points": 115 },
-      { "year": 2024, "month": "FEBRUARY", "points": 49  },
-      { "year": 2024, "month": "MARCH",    "points": 150 }
-    ],
-    "totalPoints": 314
-  }
-]
+{
+  "content": [
+    {
+      "customerId": 1,
+      "customerName": "Alice Johnson",
+      "monthlyRewards": [
+        { "year": 2024, "month": "JANUARY",  "points": 115 },
+        { "year": 2024, "month": "FEBRUARY", "points": 250 },
+        { "year": 2024, "month": "MARCH",    "points": 70  }
+      ],
+      "totalPoints": 435
+    }
+  ],
+  "page": 0,
+  "size": 10,
+  "totalElements": 3,
+  "totalPages": 1,
+  "last": true
+}
 ```
 
----
+### Response — `GET /api/rewards/{customerId}`
 
-### GET `/api/rewards/{customerId}`
-
-Returns the reward summary for a single customer.
-
-```bash
-curl http://localhost:8081/api/rewards/1
-```
-
-**Response `200 OK`:**
 ```json
 {
   "customerId": 1,
@@ -189,40 +173,42 @@ curl http://localhost:8081/api/rewards/1
 }
 ```
 
----
-
 ### Error Responses
 
-All errors follow a consistent JSON structure:
-
 ```json
-{
-  "status": 404,
-  "error": "Not Found",
-  "message": "Customer not found with id: 999"
-}
+{ "status": 404, "error": "Not Found",   "message": "Customer not found with id: 999" }
+{ "status": 400, "error": "Bad Request", "message": "'from' date must not be after 'to' date" }
 ```
 
 | Scenario | Status |
 |---|---|
-| Customer ID does not exist | `404 Not Found` |
-| Non-numeric ID (e.g. `/api/rewards/abc`) | `400 Bad Request` |
-| Unexpected server error | `500 Internal Server Error` |
+| Customer not found | `404` |
+| Non-numeric ID | `400` |
+| Invalid date format | `400` |
+| `from` after `to` | `400` |
+| Page number < 0 or size < 1 | `400` |
+| Unexpected error | `500` |
 
 ---
 
-## Sample Data
+## Seed Data
 
-The app seeds the following data on startup:
+| Customer | Jan 2024 | Feb 2024 | Mar 2024 | Total |
+|---|---|---|---|---|
+| Alice Johnson | 115 | 250 | 70 | **435** |
+| Bob Smith | 115 | 49 | 150 | **314** |
+| Carol White | 450 | 38 | 200 | **688** |
 
-| Customer | Month | Transactions | Points |
-|---|---|---|---|
-| Alice Johnson | January 2024 | $120.00, $75.50 | 115 |
-| Alice Johnson | February 2024 | $200.00, $45.00 | 250 |
-| Alice Johnson | March 2024 | $110.00 | 70 |
-| Bob Smith | January 2024 | $55.00, $130.00 | 115 |
-| Bob Smith | February 2024 | $99.99, $40.00 | 49 |
-| Bob Smith | March 2024 | $150.00 | 150 |
-| Carol White | January 2024 | $300.00 | 550 |
-| Carol White | February 2024 | $88.00, $50.00 | 38 |
-| Carol White | March 2024 | $175.00 | 200 |
+---
+
+## Design Notes
+
+**Constructor injection** — all dependencies are `final`. No `@Autowired` needed since Spring 4.3 auto-wires a single constructor. Tests instantiate the service directly: `new RewardServiceImpl(mockRepo, mockTxRepo)`.
+
+**Java Records for DTOs** — `MonthlyRewardDTO`, `CustomerRewardSummaryDTO`, `PagedRewardSummaryDTO`, and `ErrorResponseDTO` are all records. Immutable by default, no boilerplate.
+
+**Date filtering** — both `from` and `to` are optional. Missing bounds default to `LocalDate.MIN` / `LocalDate.MAX`. Passing `from` after `to` returns a `400` immediately rather than an empty result.
+
+**Cents truncated** — `BigDecimal.longValue()` drops the fractional part before points are calculated, per the spec.
+
+**Monthly sort** — `TreeMap<YearMonth, Long>` keeps months in chronological order automatically since `YearMonth` is `Comparable`.
